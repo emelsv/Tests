@@ -14,6 +14,7 @@ inner join (select CustomerId
             group by CustomerId) c on s.CustomerId = c.CustomerId and c.MinDateCreated = s.DateCreated
 group by s.ProductId
 
+--if field Id is primary key, an integer with auto-incremented
 select s.ProductId, count(s.ProductId) as NumberFirstSales 
 from Sales s
 inner join (select CustomerId
