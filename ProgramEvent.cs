@@ -1,10 +1,11 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace ConsoleApplication1
 {
-    class Program
+    class ProgramEvent
     {
         public delegate void Swap(ref int x, ref int y);
         public static void Main(string[] args)
@@ -17,12 +18,34 @@ namespace ConsoleApplication1
             sp?.Invoke(ref a, ref b);
             Foo(a, b);
 
-            Counter c = new Counter();
+            Counter c1 = new Counter();
+            c1[0] = 5;
+            c1[1] = 10;
+            Console.WriteLine("c1[0] = {0}, , c1[1] = {1}, c1[2] = {2}", c1[0], c1[1], c1[2]);
+
+
+            Counter1 c = new Counter1();
+
             c.ValueChanged += CounterValueChanged;
 
-            c.Value = 5;
-            c.Value = 10;
+            new Thread(() =>
+            {
+                c.Value = 5;
+
+            })
+            .Start();
+
+            new Thread(() =>
+            {
+                c.Value = 10;
+            })
+            .Start();
+
             c.Value = -10;
+
+            Counter1 z = (Counter1)c.Clone();
+            z.ValueChanged += CounterValueChanged;
+            z.Value = 100;
 
             Console.ReadKey();
         }
@@ -52,12 +75,13 @@ namespace ConsoleApplication1
         }
     }
 
-    public class Counter
+    public class Counter1 : ICloneable
     {
         private static object _locker = new object();
         private int _value = 0;
 
         public event EventHandler<ValueChangedEventArgs> ValueChanged;
+
         public int Value
         {
             get
@@ -83,6 +107,16 @@ namespace ConsoleApplication1
         protected virtual void OnValueChanged(ValueChangedEventArgs e)
         {
             ValueChanged?.Invoke(this, e);
+        }
+
+        public object Clone()
+        {
+            Counter1 result = new Counter1
+            {
+                Value = this.Value
+            };
+            
+            return result;
         }
     }
 
