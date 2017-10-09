@@ -29,7 +29,7 @@ SET NOCOUNT ON
             main_card tinyint NOT NULL,             --основная(1)/дополнительная(0) карта
             oper_date_from smalldatetime NOT NULL,  --операции с
             oper_date_to smalldatetime NOT NULL,    --операции по
-            currency_id smallint NOT NULL           --идентификатор валюты
+            pc_currency_id smallint NOT NULL        --идентификатор валюты счета карты
             CONSTRAINT PK_#pc_data PRIMARY KEY
             (
                 pc_id,
@@ -110,7 +110,7 @@ SET NOCOUNT ON
         INNER JOIN dbo.accounts a
             ON pc.account_id = a.account_id 
     WHERE pc.account_id > 0
-        AND pc.pc_id = 1004374331--1032737204 --1009174452
+        AND pc.pc_id = 1004374331 --1009174452 --1032737204 
     
     --pc_id = 1032737204, 1009174452
     --pc_contract_id = 1009174453
@@ -122,13 +122,13 @@ SET NOCOUNT ON
     BEGIN
         CREATE TABLE #tmp 
         (
-            --id              int IDENTITY (1, 1) PRIMARY KEY,
+            id              int IDENTITY (1, 1) PRIMARY KEY,
             pc_id           int NOT NULL,
 --            pc_info         varchar(255),
 --            acc_credit      int,
             acc_debit       int,
             dt_oper         date NOT NULL,
-            aa_code         char(6),
+            aa_code         varchar(7),
             --dt_treat        datetime,
             --[type]          tinyint,
             doc_id          int NOT NULL,
@@ -138,15 +138,15 @@ SET NOCOUNT ON
             acc_47423_id    int,
             pc_contract_id  int,
 --            tran_info       varchar(255),
-            tran_cur_id     int,
+            tran_currency_id     int,
 --            tran_cur        varchar(3),
-            tran_sum        money,
-            acct_sum        money,
+            tran_amount        money,
+            acct_amount        money,
 --            into_sum        money,
             koef            numeric(12, 5) DEFAULT(0),
-            mcc_code        char(4),
-            --calc_sum        AS CONVERT(money, acct_sum * koef)
-            tran_code       char(2)
+            mcc_code        varchar(5),
+            --calc_sum        AS CONVERT(money, acct_amount * koef)
+            tran_code       varchar(3),
         )
 
     END
@@ -161,10 +161,10 @@ SET NOCOUNT ON
         acc_debit, 
         dt_oper,
         --dt_treat,
-        tran_cur_id,
+        tran_currency_id,
         --t_curr.c
-        tran_sum,
-        acct_sum,
+        tran_amount,
+        acct_amount,
         --into_sum,
         --[type],
         doc_id,
@@ -177,10 +177,10 @@ SET NOCOUNT ON
         acc_debit = t.acc_debit,
         dt_oper = t.acc_tran_date,
         --dt_treat = IIF(t.acc_tran_status = 30, t.acc_tran_date, NULL),
-        tran_cur_id = ISNULL(t.acc_tran_currency_id, 2),
+        currency_id = ISNULL(t.acc_tran_currency_id, 2),
         --t_curr.currency_s_name,
-        tran_sum = t.acc_tran_currency_sum,
-        acct_sum = IIF(t.acc_debit = pd.account_id, t.acc_tran_currency_sum, NULL), --NULL -- обработка проводок переноса
+        tran_amount = t.acc_tran_currency_sum,
+        acct_amount = IIF(t.acc_debit = pd.account_id, t.acc_tran_currency_sum, NULL), --NULL -- обработка проводок переноса
         into_sum = t.acc_tran_currency_sum,
         --[type] = 1,
         doc_id = t.doc_id,
@@ -199,10 +199,10 @@ SET NOCOUNT ON
         acc_debit = t.acc_debit,
         dt_oper = t.acc_tran_date,
         --dt_treat = IIF(t.acc_tran_status = 30, t.acc_tran_date, NULL),
-        tran_cur_id = ISNULL(t.acc_tran_currency_id, 2),
+        tran_currency_id = ISNULL(t.acc_tran_currency_id, 2),
         --t_curr.currency_s_name,
-        tran_sum = t.acc_tran_currency_sum,
-        acct_sum = t.acc_tran_currency_sum,
+        tran_amount = t.acc_tran_currency_sum,
+        acct_amount = t.acc_tran_currency_sum,
         --into_sum = IIF(t.acc_credit = pd.account_id, t.acc_tran_currency_sum, NULL), --NULL, -- обработка проводок переноса
         --[type] = 2,
         doc_id = t.doc_id,
@@ -214,7 +214,7 @@ SET NOCOUNT ON
         AND t.acc_tran_date >= pd.oper_date_from 
         AND t.acc_tran_date < DATEADD(mm, 1, pd.oper_date_to)
 
-    /*
+    --/*
     CREATE INDEX ix_#tmp_pp_doc_id 
     ON #tmp
     (
@@ -228,10 +228,10 @@ SET NOCOUNT ON
         doc_id,
         no_in_doc,
         acc_47423_id,
-        acct_sum,
+        acct_amount,
         koef
     )
-    */
+    --*/
 
     -- обработка дополнительных карт
     DELETE #tmp
@@ -253,13 +253,13 @@ SET NOCOUNT ON
     /*
     -- обработка проводок переноса
     UPDATE #tmp
-    SET acct_sum = t.into_sum
+    SET acct_amount = t.into_sum
     FROM #tmp t
-    WHERE t.acct_sum IS NULL
+    WHERE t.acct_amount IS NULL
         AND t.acc_debit IN (SELECT account_id FROM #pc_data)
 
     UPDATE #tmp
-    SET into_sum = t.acct_sum
+    SET into_sum = t.acct_amount
     FROM #tmp t
     WHERE t.into_sum IS NULL
         AND t.acc_credit IN (SELECT account_id FROM #pc_data)
@@ -269,7 +269,7 @@ SET NOCOUNT ON
     UPDATE #tmp
     SET dt_oper   = ISNULL(dcs.doc_date, d.transaction_time),
         aa_code   = d.authorization_approval_code,
-        tran_sum  = IIF(d.fee_amount = t.acct_sum, d.fee_amount, d.transaction_amount),
+        tran_amount  = IIF(d.fee_amount = t.acct_amount, d.fee_amount, d.transaction_amount),
         pc_id = c.pc_id,
         koef = IIF (
                         EXISTS 
@@ -414,8 +414,8 @@ SET NOCOUNT ON
     -- CyberPlat
     UPDATE t
     SET t.koef = ISNULL(kt.koef, t.koef),
-        t.tran_sum = pd.sum_in_base_currency,
-        t.acct_sum = pd.sum_in_base_currency
+        t.tran_amount = pd.sum_in_base_currency,
+        t.acct_amount = pd.sum_in_base_currency
     FROM #tmp t
         INNER JOIN dbo.payment_documents pd
             ON pd.doc_id = t.pp_doc_id
@@ -447,8 +447,8 @@ SET NOCOUNT ON
     -- Оплата ГИБДД
     UPDATE t
     SET t.koef = ISNULL(kt.koef, t.koef),
-        t.tran_sum = pd.sum_in_base_currency,
-        t.acct_sum = pd.sum_in_base_currency
+        t.tran_amount = pd.sum_in_base_currency,
+        t.acct_amount = pd.sum_in_base_currency
     FROM #tmp t
         INNER JOIN dbo.payment_documents pd
             ON pd.doc_id = t.pp_doc_id
@@ -476,8 +476,8 @@ SET NOCOUNT ON
     -- Повышающий/понижающий кэффициент платежей ЛО для расчета оборота по карте - ЮЛ (ТЗ T8852)
     UPDATE t
     SET t.koef = COALESCE(b.koef, k.koef, t.koef),
-        t.tran_sum = pd.sum_in_base_currency,
-        t.acct_sum = pd.sum_in_base_currency
+        t.tran_amount = pd.sum_in_base_currency,
+        t.acct_amount = pd.sum_in_base_currency
     FROM #tmp t
         INNER JOIN dbo.payment_documents pd
             ON pd.doc_id = t.pp_doc_id
@@ -577,7 +577,7 @@ SET NOCOUNT ON
             pc_contract_id int,
             pc_type_id smallint,
             account_id int,
-            currency_id smallint,
+            pc_currency_id smallint,
             product_id int--, 
             --turnover_amount money
         )
@@ -590,7 +590,7 @@ SET NOCOUNT ON
             t.pc_contract_id,
             pd.pc_type_id,
             t.account_id,
-            pd.currency_id,
+            pd.pc_currency_id,
             t.product_id--, 
             --t.turnover_amount
     FROM
@@ -600,7 +600,7 @@ SET NOCOUNT ON
                 pc_contract_id,
                 account_id = acc_debit,
                 product_id--,
-                --total_sum = SUM(ISNULL(acct_sum, 0)) OVER (PARTITION BY t.pc_contract_id),  -- [ВСЕГО_сумма_операций]
+                --total_sum = SUM(ISNULL(acct_amount, 0)) OVER (PARTITION BY t.pc_contract_id),  -- [ВСЕГО_сумма_операций]
                 --turnover_amount = SUM(ISNULL(calc_sum, 0)) OVER (PARTITION BY pc_contract_id)   -- [ВСЕГО_расчетная_сумма]        
             FROM #tmp
         ) t
@@ -713,14 +713,14 @@ SET NOCOUNT ON
         operday = aa.operday,
         ptd.pc_id,
         ptd.pc_type_id,
-        account_balance = IIF(ptd.currency_id = 2, aa.begin_rouble, aa.begin_currency),
-        account_balance_min = MIN(IIF(ptd.currency_id = 2, aa.begin_rouble, aa.begin_currency)) OVER (PARTITION BY ptd.pc_id),
-        account_balance_max = MAX(IIF(ptd.currency_id = 2, aa.begin_rouble, aa.begin_currency)) OVER (PARTITION BY ptd.pc_id),
-        tran_amount = ISNULL(tmp.calc_sum, 0),
-        turn_amount = SUM(ISNULL(tmp.calc_sum, 0)) OVER (PARTITION BY ptd.pc_id ORDER BY operday ASC),
+        account_balance = IIF(ptd.pc_currency_id = 2, aa.begin_rouble, aa.begin_currency),
+        account_balance_min = MIN(IIF(ptd.pc_currency_id = 2, aa.begin_rouble, aa.begin_currency)) OVER (PARTITION BY ptd.pc_id),
+        account_balance_max = MAX(IIF(ptd.pc_currency_id = 2, aa.begin_rouble, aa.begin_currency)) OVER (PARTITION BY ptd.pc_id),
+        tran_amount = ISNULL(tmp.calc_amount, 0),
+        turn_amount = SUM(ISNULL(tmp.calc_amount, 0)) OVER (PARTITION BY ptd.pc_id ORDER BY operday ASC),
         --turn_amount_total = SUM(ISNULL(tmp.calc_sum, 0)) OVER (PARTITION BY ptd.pc_id),
         product_tariff_id = t.product_tariff_id,
-        ptd.currency_id
+        ptd.pc_currency_id
     FROM  #pc_turnover_data ptd
         INNER JOIN dbo.accounts_amounts aa
             ON aa.account_id = ptd.account_id
@@ -731,7 +731,7 @@ SET NOCOUNT ON
              SELECT 
                  account_id = acc_debit,
                  dt_oper,
-                 calc_sum = SUM(/*calc_sum*/acct_sum * koef)
+                 calc_amount = SUM(/*calc_sum*/acct_amount * koef)
              FROM #tmp
              WHERE koef <> 0
              GROUP BY
@@ -821,7 +821,7 @@ SET NOCOUNT ON
     DECLARE 
         @trans_codes table
         (
-            trans_code varchar(10)
+            trans_code varchar(3)
         )
     
     INSERT INTO @trans_codes   
@@ -834,22 +834,71 @@ SET NOCOUNT ON
         AND tca.from_date <= @calc_eomonth
         AND ISNULL(tca.to_date, @calc_eomonth) >= @calc_eomonth
 
+    IF OBJECT_ID('tempdb..#pc_cashback_data') IS NULL
+        CREATE TABLE #pc_cashback_data
+        (
+            id                      int IDENTITY (1, 1) PRIMARY KEY,
+            pc_id                   int,
+            mcc_code                varchar(5),
+            tran_code               varchar(3),
+            tran_amount             money,
+            tran_amount_rub         money,
+            rate_of_currency        numeric(15, 5),
+            obj_id                  int,
+            min_operation_sum       money,
+            min_sum                 money,
+            max_sum                 money,
+            begin_date              smalldatetime,
+            end_date                smalldatetime,
+            action_name             varchar(255),
+            tran_currency_id        int,
+            rate                    numeric(5, 2),
+            nan_turnover_sum        money,
+            an_turnover_sum         money,
+            pc_max_sum              money,
+            pc_min_operation_sum    money,
+        )
+    ELSE 
+        TRUNCATE TABLE #pc_cashback_data;
+
+    INSERT INTO #pc_cashback_data
+    (
+        pc_id,
+        mcc_code,
+        tran_code,
+        tran_amount,
+        tran_amount_rub,
+        rate_of_currency,  
+        obj_id,            
+        min_operation_sum, 
+        min_sum,           
+        max_sum,           
+        begin_date,        
+        end_date,          
+        action_name,       
+        tran_currency_id,
+        rate 
+    )
     SELECT
-        d.tran_code,
-        d.mcc_code,
-        d.tran_sum,
-        account_amount_rub = d.tran_sum * ISNULL(r.rate_of_currency, 1), -- Сумма операции в рублях
-        rate_of_currency = ISNULL(r.rate_of_currency, 1),
         d.pc_id,
+        d.mcc_code,
+        d.tran_code,
+        d.tran_amount, --account_amount_4_cash_back
+        tran_amount_rub = d.tran_amount * ISNULL(r.rate_of_currency, 1), -- Сумма операции в рублях
+        rate_of_currency = ISNULL(r.rate_of_currency, 1),
         p.obj_id,
         p.min_operation_sum,
         p.min_sum,
         p.max_sum,
-        beg_date = p.begin_date,
+        p.begin_date,
         p.end_date,
         p.action_name,
-        currency_id = d.tran_cur_id
-    --INTO #tmp_cb
+        d.tran_currency_id,
+        pcp.rate--,
+        --an_turnover_sum = IIF(p.action_name IS NULL, SUM( d.tran_amount * ISNULL(r.rate_of_currency, 1)) OVER (PARTITION BY d.pc_id), 0.),     --оборот в рублях
+        --an_base_amount = IIF(p.action_name IS NULL, SUM(d.tran_amount * pcp.rate / 100.) OVER (PARTITION BY d.pc_id, d.tran_currency_id), 0.),
+        --ann_turnover_sum = IIF(p.action_name IS NOT NULL, SUM( d.tran_amount * ISNULL(r.rate_of_currency, 1)) OVER (PARTITION BY d.pc_id, p.obj_id), 0.),
+        --ann_base_amount = IIF(p.action_name IS NOT NULL, SUM(d.tran_amount * pcp.rate / 100.) OVER (PARTITION BY d.pc_id , d.tran_currency_id), 0.)
     FROM #tmp d
         INNER JOIN @trans_codes tc
             ON d.tran_code = tc.trans_code
@@ -857,26 +906,67 @@ SET NOCOUNT ON
             ON pp.product_id = d.product_id
         INNER JOIN dbo.pc_ref_cash_back_tran_code_jnt p
             ON pp.obj_id = p.obj_id
+        INNER JOIN dbo.pc_ref_cash_back_tran_code_param_jnt pcp
+            ON pcp.code_transaction = d.tran_code
+                AND p.obj_id = pcp.obj_id
+                AND 
+                (
+                    pcp.MCC_code_transaction_in IS NULL
+                    OR pcp.MCC_code_transaction_in = d.mcc_code
+                )
         LEFT JOIN dbo.exchanges_rates r
-            ON r.currency_id = d.tran_cur_id
+            ON r.currency_id = d.tran_currency_id
                 AND r.begin_date = @calc_eomonth
     WHERE p.begin_date <= d.dt_oper
         AND ISNULL(p.end_date, d.dt_oper) >= d.dt_oper
-        --AND d.dt_oper BETWEEN @calc_somonth AND @calc_eomonth
         AND d.mcc_code NOT LIKE '%' + ISNULL(p.MCC_code_transaction_out, '-') + '%'
-            -- По акциям за месяц - 1 также, как в текущем периоде
-        --AND DATEDIFF(month, @calc_eomonth, @today) <= 1
-        --AND p.action_name IS NOT NULL
+        AND 
+        (
+           p.action_name IS NULL
+           OR  (
+                   -- По акциям за месяц - 1 также, как в текущем периоде
+                   DATEDIFF(month, @calc_eomonth, @today) <= 1 
+                   AND p.action_name IS NOT NULL
+               )
+        )
+
+    SELECT DISTINCT
+        pr.pc_id,
+        cashback_amount = 
+            CASE 
+                WHEN pr.tran_amount < IIF(pr.tran_currency_id = 2, pr.min_sum, pr.min_sum / ISNULL(pr.rate_of_currency, 1.))
+                    THEN IIF(pr.tran_currency_id = 2, pr.min_sum, pr.min_sum / ISNULL(pr.rate_of_currency, 1.))
+                WHEN pr.tran_amount > IIF(pr.tran_currency_id = 2, pr.max_sum, pr.max_sum / ISNULL(pr.rate_of_currency, 1.))
+                    THEN IIF(pr.tran_currency_id = 2, pr.max_sum, pr.max_sum / ISNULL(pr.rate_of_currency, 1.))
+                ELSE pr.tran_amount
+            END
+    FROM
+    (
+        SELECT 
+            tr.id,
+            tr.pc_id,
+            tr.tran_currency_id,
+            tr.rate_of_currency,
+            turnover_amount = SUM(tran_amount_rub) OVER (PARTITION BY tr.pc_id),
+            min_sum = MIN(tr.min_sum) OVER (PARTITION BY tr.pc_id),
+            max_sum = MIN(tr.max_sum) OVER (PARTITION BY tr.pc_id),
+            tran_amount = SUM(tr.tran_amount * tr.rate / 100.) OVER (PARTITION BY tr.pc_id, tr.tran_currency_id)
+        FROM #pc_cashback_data tr
+        WHERE tr.action_name IS NULL
+    ) pr
 
 --**********************************************************************************************************************
-    SELECT * FROM #tmp
-    SELECT * FROM #pc_turnover_data
-    SELECT * FROM #pc_data
-    SELECT * FROM #pc_calc_data
+    SELECT '#tmp' AS TableName, * FROM #tmp
+    --SELECT * FROM #pc_turnover_data
+    SELECT '#pc_data' AS TableName, * FROM #pc_data
+    SELECT '#pc_cashback_data' AS TableName, * FROM #pc_cashback_data
+    SELECT '#pc_calc_data' AS TableName, * FROM #pc_calc_data
     --SELECT * FROM #pc_account_balance
     
     SELECT --*,
-           DISTINCT pcd.pc_id,
+           DISTINCT 
+           'Result' AS TableName,
+           pcd.pc_id,
            tariff_limit_summa,
            turn_amount_total = SUM(tran_amount) OVER (PARTITION BY pc_id),
            is_turnover = IIF(tariff_sum_turnover > (SUM(tran_amount) OVER (PARTITION BY pc_id)), 0, 1),
@@ -889,6 +979,7 @@ SET NOCOUNT ON
     DROP TABLE #pc_turnover_data
     DROP TABLE #pc_data
     --DROP TABLE #pc_account_balance
+    DROP TABLE #pc_cashback_data;
     DROP TABLE #pc_calc_data
 
 /*          
