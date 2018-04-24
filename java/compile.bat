@@ -1,7 +1,8 @@
 @echo Compile...
 @javac -sourcepath ./src -d bin src/study/Program.java
-@echo Run
-@java -classpath ./bin study.Program
+@echo Create jar file...
 @cd bin
-jar cfm program.jar manifest.txt study/*.class
+@jar cfm program.jar manifest.txt study/*.class
+@echo Run...
+@java -jar program.jar
 
