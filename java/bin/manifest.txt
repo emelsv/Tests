@@ -1,0 +1,2 @@
+Class-Path: program.jar
+Main-Class: study.Program
